@@ -1,2 +1,5 @@
 ompl/
 rag_data/
+
+.uv-cache/
+.venv/
