@@ -1,5 +1,12 @@
+# library
 ompl/
-rag_data/
 
+
+# Python virtual environments
 .uv-cache/
 .venv/
+
+
+# generated data
+rag_data/
+.chroma/
