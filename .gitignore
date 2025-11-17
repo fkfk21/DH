@@ -5,8 +5,10 @@ ompl/
 # Python virtual environments
 .uv-cache/
 .venv/
+*/__pycache__/
 
 
 # generated data
 rag_data/
 .chroma/
+
