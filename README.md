@@ -13,7 +13,30 @@ Open Motion Planning Library（OMPL）は、サンプリングベースのモー
 
 
 
-## How to Use
+## How to Setup
+
+### LLMのLocal API endpointを建てる
+
+1. ollamaをinstall
+```
+curl -fsSL https://ollama.com/install.sh | sh
+```
+2. モデルのDownload
+   1. 今回は2つ、`gpt-oss:20b`と`deepseek-r1:8b` を使用
+   ```
+   ollama pull ${MODEL_NAME}
+   ```
+
+3. start ollama model
+```
+ollama run ${MODEL_NAME}
+```
+
+4. (optional) stop ollama model
+```
+ollama stop ${MODEL_NAME}
+```
+
 
 ### DoxygenからOMPLのドキュメントを生成する手順
 
