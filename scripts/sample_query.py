@@ -8,7 +8,10 @@ from query_local_rag import run_query
 
 def main() -> None:
     question = "OMPLの最適化プランナーはどのような目的関数を扱える？"
-    context, answer = run_query(question)
+    context, answer = run_query(
+        question,
+        collection_name="ompl_docs_en",
+        model_name="sentence-transformers/all-mpnet-base-v2")
     print("# Question")
     print(question)
     print("\n# Retrieved Context")

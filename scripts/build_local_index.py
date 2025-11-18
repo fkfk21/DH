@@ -65,15 +65,18 @@ def build_index(
 
     for batch in batched(iter_chunks(chunk_path), batch_size=batch_size):
         documents = [record["text"] for record in batch]
-        metadatas = [
-            {
-                "source": record.get("source"),
-                "title": record.get("title"),
-                "doc_type": record.get("doc_type"),
-                "chunk_index": record.get("chunk_index"),
-            }
-            for record in batch
-        ]
+        metadatas = []
+        for record in batch:
+            metadatas.append(
+                {
+                    "source": record.get("source"),
+                    "title": record.get("title"),
+                    "kind": record.get("kind"),
+                    "symbol": record.get("symbol"),
+                    "namespace": record.get("namespace"),
+                    "chunk_index": record.get("chunk_index"),
+                }
+            )
         ids = [f"chunk-{next_id + i}" for i in range(len(batch))]
         next_id += len(batch)
         collection.upsert(documents=documents, metadatas=metadatas, ids=ids)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate text chunks from OMPL documentation for downstream RAG indexing."""
+"""Generate structured text chunks from OMPL documentation for RAG indexing."""
 
 from __future__ import annotations
 
@@ -7,53 +7,14 @@ import argparse
 import json
 import re
 from dataclasses import dataclass
-from html import unescape
-from html.parser import HTMLParser
 from pathlib import Path
-from typing import Iterable, List, Tuple
+from typing import Iterable, List, Optional, Tuple
+
+from bs4 import BeautifulSoup
 
 
-NEWLINE_TAGS = {
-    "p",
-    "br",
-    "li",
-    "div",
-    "section",
-    "tr",
-    "td",
-    "th",
-    "pre",
-    "code",
-    "h1",
-    "h2",
-    "h3",
-    "h4",
-    "h5",
-    "h6",
-}
-
-
-class _SimpleHTMLStripper(HTMLParser):
-    """Minimal HTML-to-text converter so we avoid non-standard dependencies."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self._parts: List[str] = []
-
-    def handle_starttag(self, tag: str, attrs) -> None:  # type: ignore[override]
-        if tag in NEWLINE_TAGS:
-            self._parts.append("\n")
-
-    def handle_endtag(self, tag: str) -> None:  # type: ignore[override]
-        if tag in NEWLINE_TAGS:
-            self._parts.append("\n")
-
-    def handle_data(self, data: str) -> None:  # type: ignore[override]
-        if data.strip():
-            self._parts.append(data)
-
-    def get_text(self) -> str:
-        return unescape("".join(self._parts))
+CHUNK_SIZE = 2000
+CHUNK_OVERLAP = 200
 
 
 @dataclass
@@ -61,18 +22,119 @@ class SourceDoc:
     path: Path
     text: str
     title: str
-    doc_type: str
+    kind: str
+    symbol: Optional[str] = None
+    namespace: Optional[str] = None
+
+
+def clean_text(value: str) -> str:
+    value = re.sub(r"\r", "\n", value)
+    value = re.sub(r"[ \t]+", " ", value)
+    value = re.sub(r"\n{3,}", "\n\n", value)
+    return value.strip()
+
+
+def chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> Iterable[str]:
+    if not text:
+        return []
+    clean = text
+    start = 0
+    length = len(clean)
+    chunks: List[str] = []
+    while start < length:
+        end = min(start + chunk_size, length)
+        if end < length:
+            newline = clean.rfind("\n", start, end)
+            if newline > start + 200:
+                end = newline
+        chunk = clean[start:end].strip()
+        if chunk:
+            chunks.append(chunk)
+        if end >= length:
+            break
+        start = max(end - overlap, 0)
+    return chunks
+
+
+def detect_metadata(path: Path, soup: BeautifulSoup, title: str) -> Tuple[str, Optional[str], Optional[str]]:
+    filename = path.name
+    lower = title.lower()
+    kind = "page"
+    symbol = None
+
+    if filename.startswith("class"):
+        kind = "class"
+    elif filename.startswith("struct"):
+        kind = "struct"
+    elif filename.startswith("namespace"):
+        kind = "namespace"
+    elif filename.startswith("file"):
+        kind = "file"
+    elif filename.startswith("group__"):
+        kind = "tutorial"
+    elif "tutorial" in filename:
+        kind = "tutorial"
+
+    if "class reference" in lower:
+        kind = "class"
+        symbol = title.replace("Class Reference", "").strip()
+    elif "struct reference" in lower:
+        kind = "struct"
+        symbol = title.replace("Struct Reference", "").strip()
+    elif "namespace reference" in lower:
+        kind = "namespace"
+        symbol = title.replace("Namespace Reference", "").strip()
+    elif "file reference" in lower:
+        kind = "file"
+        symbol = title.replace("File Reference", "").strip()
+    elif "module reference" in lower:
+        kind = "module"
+        symbol = title.replace("Module Reference", "").strip()
+
+    if not symbol:
+        header = soup.find("div", class_="title")
+        if header:
+            symbol = header.get_text(" ", strip=True)
+
+    namespace = None
+    if symbol and "::" in symbol:
+        namespace = symbol.rsplit("::", 1)[0]
+
+    return kind, symbol, namespace
+
+
+def extract_body_text(soup: BeautifulSoup) -> str:
+    for tag in soup(["script", "style", "noscript", "header", "footer"]):
+        tag.decompose()
+    main = soup.select_one("div.contents") or soup.select_one("div#doc-content") or soup.body
+    if main is None:
+        return ""
+    for nav in main.select("div.navpath, div.header, div.headertitle"):
+        nav.decompose()
+    text = main.get_text("\n", strip=True)
+    return clean_text(text)
 
 
 def parse_html_file(path: Path) -> SourceDoc:
     html = path.read_text(encoding="utf-8", errors="ignore")
-    parser = _SimpleHTMLStripper()
-    parser.feed(html)
-    parser.close()
-    text = parser.get_text()
-    match = re.search(r"<title>(.*?)</title>", html, flags=re.IGNORECASE | re.DOTALL)
-    title = match.group(1).strip() if match else path.stem
-    return SourceDoc(path=path, text=text, title=title, doc_type="html")
+    soup = BeautifulSoup(html, "html.parser")
+    title = soup.title.get_text(strip=True) if soup.title else path.stem
+    kind, symbol, namespace = detect_metadata(path, soup, title)
+    body = extract_body_text(soup)
+    header_lines = [f"Title: {title}", f"Kind: {kind}"]
+    if symbol:
+        header_lines.append(f"Symbol: {symbol}")
+    if namespace:
+        header_lines.append(f"Namespace: {namespace}")
+    text = clean_text("\n".join(header_lines) + "\n\n" + body)
+    return SourceDoc(
+        path=path,
+        text=text,
+        title=title,
+        kind=kind,
+        symbol=symbol,
+        namespace=namespace,
+    )
 
 
 def parse_markdown_file(path: Path) -> SourceDoc:
@@ -83,36 +145,8 @@ def parse_markdown_file(path: Path) -> SourceDoc:
         if stripped.startswith("#"):
             title = stripped.lstrip("# ").strip() or title
             break
-    return SourceDoc(path=path, text=content, title=title, doc_type="markdown")
-
-
-def normalize_whitespace(value: str) -> str:
-    return re.sub(r"\s+", " ", value).strip()
-
-
-def chunk_text(text: str, chunk_size: int = 1200, overlap: int = 200) -> Iterable[str]:
-    clean = normalize_whitespace(text)
-    if not clean:
-        return []
-    start = 0
-    end = 0
-    length = len(clean)
-    chunks: List[str] = []
-    while start < length:
-        end = min(start + chunk_size, length)
-        if end < length:
-            space = clean.rfind(" ", start, end)
-            if space > start + chunk_size // 2:
-                end = space
-        if end <= start:
-            end = min(start + chunk_size, length)
-        chunk = clean[start:end].strip()
-        if chunk:
-            chunks.append(chunk)
-        if end >= length:
-            break
-        start = max(end - overlap, 0)
-    return chunks
+    text = clean_text(content)
+    return SourceDoc(path=path, text=text, title=title, kind="markdown", symbol=title, namespace=None)
 
 
 def discover_documents(html_dir: Path, markdown_dir: Path) -> Iterable[SourceDoc]:
@@ -136,7 +170,9 @@ def write_chunks(docs: Iterable[SourceDoc], output_path: Path) -> Tuple[int, int
             for idx, chunk in enumerate(chunks):
                 record = {
                     "source": str(doc.path),
-                    "doc_type": doc.doc_type,
+                    "kind": doc.kind,
+                    "symbol": doc.symbol,
+                    "namespace": doc.namespace,
                     "title": doc.title,
                     "chunk_index": idx,
                     "text": chunk,
