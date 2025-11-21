@@ -96,6 +96,12 @@ ollama stop ${MODEL_NAME}
    ```
    実行結果（例）: `Wrote 19027 chunks from 2556 documents to .../rag_data/ompl_doc_chunks.jsonl`
 
+### Extractionの工夫（commit: “performance improve by changing parsing algorithm of extraction”）
+
+- 従来: Doxygen HTML をそのままテキスト化＋固定長チャンクに分割していたため、ナビゲーションや JavaScript 断片が混ざり、クラスや関数単位の情報が分断されていた。またメタデータは `doc_type` 程度で、クエリから目的のシンボルへ結び付けるのが困難だった。
+- 改善: BeautifulSoup を用いて `div.contents` など主要コンテンツだけ抽出。`Title/Kind/Symbol/Namespace` をチャンク冒頭へ埋め込み、`kind`/`symbol`/`namespace` をメタデータとして JSONL に保持。チャンク長もヘッダ単位で制御し、不要なヘッダ・スクリプトを除去してノイズを削減した。
+- 効果: Retriever が `ompl::multilevel` などシンボル名で検索した際にヒット精度が向上し、LLM へ渡すコンテキストも読みやすくなった。今後はこのメタデータを活用してクエリ種類ごとのルーティングやハイブリッド検索へ発展させる予定。
+
 
 
 
@@ -131,7 +137,7 @@ ollama stop ${MODEL_NAME}
        --collection-name ompl_docs
    ```
    - 取得したチャンクと回答が CLI に表示される。  
-   - デフォルトは `deepseek-r1:8b`。必要に応じて `--ollama-model gpt-oss:20b` などへ変更可能。`--top-k` でコンテキスト件数も調整できる。
+   - デフォルトは `deepseek-r1:8b`。必要に応じて `--ollama-model gpt-oss:20b` などへ変更可能。`--top-k` でコンテキスト件数も調整できる。質問文に「namespace」「class」「tutorial」などが含まれると `kind` メタデータを自動フィルタとして利用（無効化する場合は `--no-auto-filter` を指定）。回答は英語＋日本語訳の2部構成で返される。
 3. サンプルプログラムで一連の流れを確認  
    ```bash
    python3 samples/sample_query.py
@@ -152,7 +158,7 @@ ollama stop ${MODEL_NAME}
 
 - `scripts/query_local_rag.py`  
   - 目的: Chroma から関連チャンクを取得し、Ollama 上の LLM（例: `deepseek-r1:8b`）で回答を生成する。  
-  - 概要: SentenceTransformer でクエリをベクトル化 → Top-k を取得 → 文脈を整形して Ollama `/api/generate` に送信 → 応答と引用情報を表示。  
+  - 概要: SentenceTransformer でクエリをベクトル化 → Top-k を取得 → 文脈を整形して Ollama `/api/generate` に送信 → 応答と引用情報を表示。質問文に応じて `kind` メタデータ（namespace/class/function 等）を推定し、関連チャンクを優先的に取得する仕組みを追加。また回答フォーマットを英語→日本語訳の2部構成で固定し、研究者と日本語話者の双方に共有しやすい形にした。  
   - 実行例: `python3 scripts/query_local_rag.py "OMPLのプランナー一覧を教えて" --ollama-model deepseek-r1:8b`
 
 - `samples/sample_query.py`  

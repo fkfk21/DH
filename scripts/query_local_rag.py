@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import argparse
 import textwrap
-from typing import List
+from typing import List, Optional
 
 import chromadb
 from chromadb.utils import embedding_functions
@@ -42,6 +42,21 @@ def call_ollama(
     return data.get("response", "").strip()
 
 
+def infer_kind_from_question(question: str) -> Optional[str]:
+    lower = question.lower()
+    if "namespace" in lower:
+        return "namespace"
+    if "planner" in lower or "class" in lower:
+        return "class"
+    if "function" in lower or "method" in lower or "api" in lower:
+        return "function"
+    if "tutorial" in lower or "example" in lower or "how to" in lower:
+        return "tutorial"
+    if "file" in lower:
+        return "file"
+    return None
+
+
 def run_query(
     question: str,
     *,
@@ -52,6 +67,7 @@ def run_query(
     ollama_url: str = "http://localhost:11434",
     top_k: int = 5,
     temperature: float = 0.1,
+    auto_filter: bool = True,
 ) -> tuple[str, str]:
     embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
         model_name=model_name
@@ -60,11 +76,26 @@ def run_query(
     collection = client.get_collection(
         collection_name, embedding_function=embedding_fn
     )
-    results = collection.query(
-        query_texts=[question],
-        n_results=top_k,
-        include=["documents", "metadatas", "distances"],
-    )
+    where_clause = None
+    inferred_kind = infer_kind_from_question(question) if auto_filter else None
+    if inferred_kind:
+        where_clause = {"kind": {"$eq": inferred_kind}}
+
+    def query_collection(where_filter):
+        return collection.query(
+            query_texts=[question],
+            n_results=top_k,
+            include=["documents", "metadatas", "distances"],
+            where=where_filter,
+        )
+
+    try:
+        results = query_collection(where_clause)
+        if not results["documents"][0]:
+            raise ValueError("No results")
+    except Exception:
+        results = query_collection(None)
+        inferred_kind = None
 
     documents = results["documents"][0]
     metadatas = results["metadatas"][0]
@@ -73,14 +104,15 @@ def run_query(
         f"""
         You are an assistant for motion planning researchers. Use the provided OMPL documentation excerpts to answer the question.
         When possible, cite the source path and chunk number in parentheses.
+        Always respond in two parts:
+        1. An English answer.
+        2. A concise Japanese translation of the same answer.
 
         Context:
         {context}
 
         Question:
         {question}
-
-        Answer in Japanese if the user asks in Japanese, otherwise reply in English.
         """
     ).strip()
 
@@ -138,6 +170,11 @@ def main() -> None:
         default=0.1,
         help="Ollama 推論時の温度パラメータ。",
     )
+    parser.add_argument(
+        "--no-auto-filter",
+        action="store_true",
+        help="質問文からkindを推定したメタデータフィルタを適用しない。",
+    )
     args = parser.parse_args()
 
     context, answer = run_query(
@@ -149,6 +186,7 @@ def main() -> None:
         ollama_url=args.ollama_url,
         top_k=args.top_k,
         temperature=args.temperature,
+        auto_filter=not args.no_auto_filter,
     )
 
     print("\n=== Retrieved Context ===")
