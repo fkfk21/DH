@@ -46,7 +46,7 @@ def main() -> None:
         "--default-general-target",
         type=str,
         choices=["ompl", "survey", "skip"],
-        default="ompl",
+        default="skip",
         help="分類がgeneralのときの処理",
     )
     parser.add_argument("--top-k", type=int, default=5, help="Retriever 取得件数")

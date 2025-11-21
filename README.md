@@ -225,7 +225,7 @@ ollama stop ${MODEL_NAME}
   ```bash
   python3 -m scripts.query_auto_router "タスク計画とモーション計画を統合する方法は？"
   ```
-  - LLM へ各コレクション（Implementation/OMPL docs、Motion Planning サーベイ、Task & Motion サーベイ）の概要・代表的な見出しをコンテキストとして渡し、`implementation` / `motion_planning` / `task_and_motion_planning` / `general` のいずれかに自動分類してからルーティング。`implementation` 判定時は実装寄りの質問として扱い、OMPL API や設定手順にフォーカスした回答プロンプトを自動付与。`general` 判定時の処理（OMPL / Survey / Skip）は `--default-general-target` で設定。
+  - LLM へ各コレクション（Implementation/OMPL docs、Motion Planning サーベイ、Task & Motion サーベイ）の概要・代表的な見出しをコンテキストとして渡し、`implementation` / `motion_planning` / `task_and_motion_planning` / `general` のいずれかに自動分類してからルーティング。`implementation` 判定時は実装寄りの質問として扱い、OMPL API や設定手順にフォーカスした回答プロンプトを自動付与。`general` 判定時の処理（OMPL / Survey / Skip）は `--default-general-target`（デフォルトは `skip`）で設定。
 
 #### Query Programs Internals
 
@@ -310,7 +310,7 @@ flowchart TB
     - `implementation`: `collection_name=ompl_docs_en` / `metadata_filter=None` / `answer_instructions` に実装フォーカスの追加プロンプト。OMPL API やクラス名を参照しながら手順を説明する回答を促す。  
     - `motion_planning`: `collection_name=mp_surveys` / `metadata_filter={"topic": {"$eq": "motion_planning"}}`。Motion Planning サーベイのみを検索対象にし、概念・比較・研究動向に関する回答を生成。  
     - `task_and_motion_planning`: `collection_name=mp_surveys` / `metadata_filter={"topic": {"$eq": "task_and_motion_planning"}}`。TAMP サーベイに限定したコンテキストで回答。  
-    - `general`: `--default-general-target` の設定に従い、OMPL / Survey / Skip を選択。OMPL/Survey を選んだ場合はそれぞれ上記の設定を流用、Skip なら `run_rag_query` を呼ばずに終了。  
+    - `general`: `--default-general-target` の設定に従い、OMPL / Survey / Skip を選択（デフォルトは Skip）。OMPL/Survey を選んだ場合はそれぞれ上記の設定を流用、Skip なら `run_rag_query` を呼ばずに終了。  
   - 実行例: `python3 -m scripts.query_auto_router "TAMPの研究動向は？" --default-general-target survey`
 
 - `rag/query_pipeline.py`  
