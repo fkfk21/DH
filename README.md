@@ -310,7 +310,7 @@ flowchart TB
     - `implementation`: `collection_name=ompl_docs_en` / `metadata_filter=None` / `answer_instructions` に実装フォーカスの追加プロンプト。OMPL API やクラス名を参照しながら手順を説明する回答を促す。  
     - `motion_planning`: `collection_name=mp_surveys` / `metadata_filter={"topic": {"$eq": "motion_planning"}}`。Motion Planning サーベイのみを検索対象にし、概念・比較・研究動向に関する回答を生成。  
     - `task_and_motion_planning`: `collection_name=mp_surveys` / `metadata_filter={"topic": {"$eq": "task_and_motion_planning"}}`。TAMP サーベイに限定したコンテキストで回答。  
-    - `general`: `--default-general-target` の設定に従い、OMPL / Survey / Skip を選択（デフォルトは Skip）。OMPL/Survey を選んだ場合はそれぞれ上記の設定を流用、Skip なら `run_rag_query` を呼ばずに終了。  
+    - `general`: `--default-general-target` の設定に従い、OMPL / Survey / Skip を選択（デフォルトは Skip）。LLM には「領域外でない限り general を避ける」指示を与えており、実装/TAMP/MP に関する質問は極力該当ラベルへ分類される。OMPL/Survey を選んだ場合はそれぞれ上記の設定を流用、Skip なら `run_rag_query` を呼ばずに終了。  
   - 実行例: `python3 -m scripts.query_auto_router "TAMPの研究動向は？" --default-general-target survey`
 
 - `rag/query_pipeline.py`  

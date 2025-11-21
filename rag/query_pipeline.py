@@ -44,6 +44,12 @@ CLASSIFICATION_CONTEXT = textwrap.dedent(
     Task and Motion Planning survey collection:
       - Sources: "Garrett et al. 2021 - Integrated Task and Motion Planning", "Zhao et al. 2024 - Optimization-based TAMP".
       - Contents: Symbolic task planners combined with motion planning, benchmarks, learning-based TAMP.
+      - Cues: Mentions of "TAMP", "task and motion planning", symbolic/high-level planning steps combined with motion feasibility.
+
+    Additional cues:
+      - Implementation questions often mention APIs, classes, planners, parameters, or OMPL-specific terminology (e.g., "ompl::", "planner tuning", "integration").
+      - Motion planning surveys ask about algorithms, comparisons, or historical papers (e.g., "What is the first paper in TAMP?", "compare sampling-based planners").
+      - General should be used only if the question is clearly outside motion planning / OMPL domains.
     """
 ).strip()
 
@@ -258,7 +264,7 @@ def classify_question(
         implementation: Practical questions about implementing or configuring motion-planning systems (e.g., OMPL APIs, classes, planners, parameters, compilation/integration details).
         motion_planning: Research questions about motion planning concepts, algorithms, or surveys that are not specifically about OMPL implementation details.
         task_and_motion_planning: Questions about integrated task-and-motion planning, high-level symbolic reasoning combined with motion.
-        general: Anything unrelated or too broad to classify.
+        general: Only if the question is clearly unrelated to motion planning / OMPL / task-and-motion topics.
         Context about available collections:
         {CLASSIFICATION_CONTEXT}
         Respond ONLY in JSON with keys "label" and "reason".
