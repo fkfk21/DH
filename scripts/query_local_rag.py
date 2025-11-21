@@ -4,125 +4,34 @@
 from __future__ import annotations
 
 import argparse
-import textwrap
-from typing import List, Optional
 
-import chromadb
-from chromadb.utils import embedding_functions
-import requests
-
-
-def format_context(documents: List[str], metadatas: List[dict]) -> str:
-    blocks = []
-    for idx, (doc, meta) in enumerate(zip(documents, metadatas), start=1):
-        source = meta.get("source", "unknown")
-        title = meta.get("title", "unknown")
-        chunk_index = meta.get("chunk_index")
-        header = f"[{idx}] {title} ({source}, chunk {chunk_index})"
-        blocks.append(f"{header}\n{doc}")
-    return "\n\n".join(blocks)
-
-
-def call_ollama(
-    url: str,
-    model: str,
-    prompt: str,
-    temperature: float,
-) -> str:
-    endpoint = url.rstrip("/") + "/api/generate"
-    payload = {
-        "model": model,
-        "prompt": prompt,
-        "temperature": temperature,
-        "stream": False,
-    }
-    resp = requests.post(endpoint, json=payload, timeout=120)
-    resp.raise_for_status()
-    data = resp.json()
-    return data.get("response", "").strip()
-
-
-def infer_kind_from_question(question: str) -> Optional[str]:
-    lower = question.lower()
-    if "namespace" in lower:
-        return "namespace"
-    if "planner" in lower or "class" in lower:
-        return "class"
-    if "function" in lower or "method" in lower or "api" in lower:
-        return "function"
-    if "tutorial" in lower or "example" in lower or "how to" in lower:
-        return "tutorial"
-    if "file" in lower:
-        return "file"
-    return None
+from rag.query_pipeline import QueryResult, run_rag_query
 
 
 def run_query(
     question: str,
     *,
     persist_dir: str = ".chroma",
-    collection_name: str = "ompl_docs",
-    model_name: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+    collection_name: str = "ompl_docs_en",
+    model_name: str = "sentence-transformers/all-mpnet-base-v2",
     ollama_model: str = "deepseek-r1:8b",
     ollama_url: str = "http://localhost:11434",
     top_k: int = 5,
     temperature: float = 0.1,
     auto_filter: bool = True,
 ) -> tuple[str, str]:
-    embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
-        model_name=model_name
-    )
-    client = chromadb.PersistentClient(path=persist_dir)
-    collection = client.get_collection(
-        collection_name, embedding_function=embedding_fn
-    )
-    where_clause = None
-    inferred_kind = infer_kind_from_question(question) if auto_filter else None
-    if inferred_kind:
-        where_clause = {"kind": {"$eq": inferred_kind}}
-
-    def query_collection(where_filter):
-        return collection.query(
-            query_texts=[question],
-            n_results=top_k,
-            include=["documents", "metadatas", "distances"],
-            where=where_filter,
-        )
-
-    try:
-        results = query_collection(where_clause)
-        if not results["documents"][0]:
-            raise ValueError("No results")
-    except Exception:
-        results = query_collection(None)
-        inferred_kind = None
-
-    documents = results["documents"][0]
-    metadatas = results["metadatas"][0]
-    context = format_context(documents, metadatas)
-    prompt = textwrap.dedent(
-        f"""
-        You are an assistant for motion planning researchers. Use the provided OMPL documentation excerpts to answer the question.
-        When possible, cite the source path and chunk number in parentheses.
-        Always respond in two parts:
-        1. An English answer.
-        2. A concise Japanese translation of the same answer.
-
-        Context:
-        {context}
-
-        Question:
-        {question}
-        """
-    ).strip()
-
-    answer = call_ollama(
-        url=ollama_url,
-        model=ollama_model,
-        prompt=prompt,
+    result: QueryResult = run_rag_query(
+        question,
+        persist_dir=persist_dir,
+        collection_name=collection_name,
+        model_name=model_name,
+        ollama_model=ollama_model,
+        ollama_url=ollama_url,
+        top_k=top_k,
         temperature=temperature,
+        auto_filter=auto_filter,
     )
-    return context, answer
+    return result.context, result.answer
 
 
 def main() -> None:

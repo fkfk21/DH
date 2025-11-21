@@ -3,15 +3,12 @@
 
 from __future__ import annotations
 
-from query_local_rag import run_query
+from .query_local_rag import run_query
 
 
 def main() -> None:
     question = "OMPLの最適化プランナーはどのような目的関数を扱える？"
-    context, answer = run_query(
-        question,
-        collection_name="ompl_docs_en",
-        model_name="sentence-transformers/all-mpnet-base-v2")
+    context, answer = run_query(question, collection_name="ompl_docs_en")
     print("# Question")
     print(question)
     print("\n# Retrieved Context")

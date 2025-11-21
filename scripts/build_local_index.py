@@ -111,7 +111,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--model-name",
         type=str,
-        default="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+        default="sentence-transformers/all-mpnet-base-v2",
         help="SentenceTransformer model to use for embeddings.",
     )
     parser.add_argument(
