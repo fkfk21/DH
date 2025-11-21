@@ -1,6 +1,9 @@
 # library
 ompl/
 
+# Paper
+paper/
+
 
 # Python virtual environments
 .uv-cache/
